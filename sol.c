@@ -2,6 +2,7 @@
 
 #define P_LENA128 "./Lena_128x128_yuv400.raw"
 #define P_LENA512_BILINEAR "./Lena_512x512_yuv400_bilinear.raw"
+#define P_LENA512_3THLAGRANGE "./Lena_512x512_yuv400_3thlagrange.raw"
 typedef unsigned char PIXEL;
 typedef PIXEL img128[128][128];
 typedef PIXEL img512[512][512];
@@ -10,7 +11,9 @@ void get128(img128 img, char * path);
 void put128(img128 img);
 void put512(img512 img);
 void save512(img512 img, char * path);
+
 void bilinear(img128 input, img512 output);
+void thirdLagrange(img128 input, img512 output);
 
 int main(void){
     img128 LENA;
@@ -21,6 +24,11 @@ int main(void){
     bilinear(LENA, LENA_BILINEAR);
     //put512(LENA_BILINEAR);
     save512(LENA_BILINEAR, P_LENA512_BILINEAR);
+
+    img512 LENA_3THLAGRANGE;
+    thirdLagrange(LENA, LENA_3THLAGRANGE);
+    //put512(LENA_3THLAGRANGE);
+    save512(LENA_3THLAGRANGE, P_LENA512_3THLAGRANGE);
 
     return 0;
 }
@@ -107,4 +115,99 @@ void bilinear(img128 input, img512 output){
 		output[1][c] = output[2][c]; // 위
 		output[511][c] = output[510][c]; // 아래
 	}
+}
+
+void thirdLagrange(img128 input, img512 output){
+    for(int r = 0; r < 128; r++){
+        for(int c = 0; c < 124; c+=3){
+            PIXEL y0 = input[r][c];
+            PIXEL y1 = input[r][c+1];
+            PIXEL y2 = input[r][c+2];
+            PIXEL y3 = input[r][c+3];
+
+            int i = 0;
+            if(c == 0) i = -2;
+            for (; i < 12; i++) {
+				int n0 = (i - 4) * (i - 8) * (i - 12); 
+				int n1 = (i - 8) * (i - 12) * (i - 0);
+				int n2 = (i - 0) * (i - 4) * (i - 12);
+				int n3 = (i - 0) * (i - 4) * (i - 8); 
+
+				int l0 = -n0;
+				int l1 = n1 * 3;
+				int l2 = -n2 * 3;
+				int l3 = n3;
+
+				output[r*4+2][c*4+i+2] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+			}
+        }
+
+        //바운더리
+        int c = 124;
+        PIXEL y0 = input[r][c];
+        PIXEL y1 = input[r][c+1];
+        PIXEL y2 = input[r][c+2];
+        PIXEL y3 = input[r][c+3];
+        int i = 0;
+        for (; i < 14; i++) {
+            int n0 = (i - 4) * (i - 8) * (i - 12);
+            int n1 = (i - 8) * (i - 12) * (i - 0);
+            int n2 = (i - 0) * (i - 4) * (i - 12);
+            int n3 = (i - 0) * (i - 4) * (i - 8); 
+
+            int l0 = -n0;
+            int l1 = n1 * 3;
+            int l2 = -n2 * 3;
+            int l3 = n3;
+
+            output[r*4+2][c*4+i+2] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+        }
+    }
+    
+    //put512(output);
+    for(int c = 0; c < 512; c++){
+        for(int r = 0; r < 124; r+=3){
+            PIXEL y0 = output[r*4+2][c];
+            PIXEL y1 = output[(r+1)*4+2][c];
+            PIXEL y2 = output[(r+2)*4+2][c];
+            PIXEL y3 = output[(r+3)*4+2][c];
+            
+            int i = 0;
+            if(r == 0) i -= 2;
+            for (; i < 12; i++) {
+				int n0 = (i - 4) * (i - 8) * (i - 12);
+				int n1 = (i - 8) * (i - 12) * (i - 0);
+				int n2 = (i - 0) * (i - 4) * (i - 12);
+				int n3 = (i - 0) * (i - 4) * (i - 8); 
+
+				int l0 = -n0;
+				int l1 = n1 * 3;
+				int l2 = -n2 * 3;
+				int l3 = n3;
+
+				output[r*4+i+2][c] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+			}
+        }
+
+        //바운더리
+        int r = 124;
+        PIXEL y0 = output[r*4+2][c];
+        PIXEL y1 = output[(r+1)*4+2][c];
+        PIXEL y2 = output[(r+2)*4+2][c];
+        PIXEL y3 = output[(r+3)*4+2][c];
+        int i = 0;
+        for (; i < 14; i++) {
+            int n0 = (i - 4) * (i - 8) * (i - 12); 
+            int n1 = (i - 8) * (i - 12) * (i - 0);
+            int n2 = (i - 0) * (i - 4) * (i - 12);
+            int n3 = (i - 0) * (i - 4) * (i - 8); 
+
+            int l0 = -n0;
+            int l1 = n1 * 3;
+            int l2 = -n2 * 3;
+            int l3 = n3;
+
+            output[r*4+i+2][c] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+        }
+    }
 }
