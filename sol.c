@@ -1,6 +1,8 @@
 #include <stdio.h>
+#include <math.h>
 
 #define P_LENA128 "./Lena_128x128_yuv400.raw"
+#define P_LENA512 "./Lena_512x512_yuv400_original.raw"
 #define P_LENA512_BILINEAR "./Lena_512x512_yuv400_bilinear.raw"
 #define P_LENA512_3THLAGRANGE "./Lena_512x512_yuv400_3thlagrange.raw"
 #define P_LENA512_SIXTAB "./Lena_512x512_yuv400_sixtab.raw"
@@ -10,6 +12,7 @@ typedef PIXEL img128[128][128];
 typedef PIXEL img512[512][512];
 
 void get128(img128 img, char * path);
+void get512(img512 img, char * path);
 void put128(img128 img);
 void put512(img512 img);
 void save512(img512 img, char * path);
@@ -18,25 +21,36 @@ void bilinear(img128 input, img512 output);
 void thirdLagrange(img128 input, img512 output);
 void sixtab(img128 input, img512 output);
 
+void RMSEandPSNR(img512 input, img512 output);
+
 int main(void){
     img128 LENA;
+    img512 LENA_ORIGINAL;
     get128(LENA, P_LENA128);
+    get512(LENA_ORIGINAL, P_LENA512);
+    //put512(LENA_ORIGINAL);
     //put128(LENA);
 
+    printf("BILINEAR\n");
     img512 LENA_BILINEAR;
     bilinear(LENA, LENA_BILINEAR);
     //put512(LENA_BILINEAR);
     save512(LENA_BILINEAR, P_LENA512_BILINEAR);
+    RMSEandPSNR(LENA_ORIGINAL, LENA_BILINEAR);
 
+    printf("3THLAGRANGE\n");
     img512 LENA_3THLAGRANGE;
     thirdLagrange(LENA, LENA_3THLAGRANGE);
     //put512(LENA_3THLAGRANGE);
     save512(LENA_3THLAGRANGE, P_LENA512_3THLAGRANGE);
-
+    RMSEandPSNR(LENA_ORIGINAL, LENA_3THLAGRANGE);
+    
+    printf("6SIXTAB\n");
     img512 LENA_SIXTAB;
     sixtab(LENA, LENA_SIXTAB);
     //put512(LENA_3THLAGRANGE);
     save512(LENA_SIXTAB, P_LENA512_SIXTAB);
+    RMSEandPSNR(LENA_ORIGINAL, LENA_SIXTAB);
 
     return 0;
 }
@@ -46,6 +60,16 @@ void get128(img128 img, char * path){
     if (fp) {
         for(int r = 0; r < 128; r++){
             for(int c = 0; c < 128; c++)
+                img[r][c] = fgetc(fp);
+        }
+    }
+    fclose(fp);
+}
+void get512(img512 img, char * path){
+    FILE*fp = fopen(path, "r");
+    if (fp) {
+        for(int r = 0; r < 512; r++){
+            for(int c = 0; c < 512; c++)
                 img[r][c] = fgetc(fp);
         }
     }
@@ -78,7 +102,7 @@ void save512(img512 img, char * path){
 }
 
 void bilinear(img128 input, img512 output){
-    //입력이미지 픽셀마다 5*4 interpolation
+    //입력이미지 픽셀마다 5<<2 interpolation
     for(int r = 0; r < 128-1; r++){
         for(int c = 0; c < 128-1; c++){
             PIXEL v1 = input[r][c];
@@ -86,19 +110,20 @@ void bilinear(img128 input, img512 output){
             PIXEL v3 = input[r+1][c];
             PIXEL v4 = input[r+1][c+1];
             //첫번째 줄(init 1개 + 3개 = 4열)
-            output[r*4+2][c*4+2] = v1;
+            output[(r<<2)+2][(c<<2)+2] = v1;
             for(int i = 1; i < 4; i++)
-                output[r*4+2][(c*4)+i+2] = (v1*(4-i) + v2*i) >> 2;
+                output[(r<<2)+2][((c<<2))+i+2] = ((v1<<2)*(4-i) + (v2<<2)*i + 8) >> 4;
             
             //두번째 줄(init 1개 + 3개 = 4열)
-            output[(r+1)*4+2][c*4+2] = v3;
+            output[((r+1)<<2)+2][(c<<2)+2] = v3;
             for(int i = 1; i < 4; i++)
-                output[(r+1)*4+2][(c*4)+i+2] = (v3*(4-i) + v4*i) >> 2;
+                output[((r+1)<<2)+2][((c<<2))+i+2] = ((v3<<2)*(4-i) + (v4<<2)*i + 8) >> 4;
             
             //4개의 줄 사이 채우기(4열에 대하여 * 빈칸 3줄 = 12개)
             for(int i = 0; i < 4; i++){
                 for(int j = 1; j < 4; j++)
-                    output[r*4+j+2][c*4+i+2] = (output[r*4+2][c*4+i+2]*(4-j) + output[(r+1)*4+2][c*4+i+2]*j) >> 2;
+                    output[(r<<2)+j+2][(c<<2)+i+2] = 
+                    (((output[(r<<2)+2][(c<<2)+i+2]<<2)*(4-j) + (output[((r+1)<<2)+2][(c<<2)+i+2]<<2)*j)) >> 4;
             }
         }
     }
@@ -106,10 +131,10 @@ void bilinear(img128 input, img512 output){
     for(int r = 0; r < 128-1; r++){
         PIXEL v1 = input[r][127];
         PIXEL v3 = input[r+1][127];
-        output[r*4+2][510] = v1;
-        output[(r+1)*4+2][510] = v3;
+        output[(r<<2)+2][510] = v1;
+        output[((r+1)<<2)+2][510] = v3;
         for(int j = 1; j < 4; j++)
-            output[r*4+j+2][510] = (output[r*4+2][510]*(4-j) + output[(r+1)*4+2][510]*j) >> 2;
+            output[(r<<2)+j+2][510] = (((output[(r<<2)+2][510]<<2)*(4-j) + (output[((r+1)<<2)+2][510]<<2)*j)) >> 4;
     }
     
 	//영역 밖 interpolation, 주변값 복사
@@ -146,7 +171,8 @@ void thirdLagrange(img128 input, img512 output){
 				int l2 = -n2 * 3;
 				int l3 = n3;
 
-				output[r*4+2][c*4+i+2] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+				output[(r<<2)+2][(c<<2)+i+2] = 
+                (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3.0);
 			}
         }
 
@@ -168,17 +194,18 @@ void thirdLagrange(img128 input, img512 output){
             int l2 = -n2 * 3;
             int l3 = n3;
 
-            output[r*4+2][c*4+i+2] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+            output[(r<<2)+2][(c<<2)+i+2] = 
+            (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3.0);
         }
     }
     
     //put512(output);
     for(int c = 0; c < 512; c++){
         for(int r = 0; r < 124; r+=3){
-            PIXEL y0 = output[r*4+2][c];
-            PIXEL y1 = output[(r+1)*4+2][c];
-            PIXEL y2 = output[(r+2)*4+2][c];
-            PIXEL y3 = output[(r+3)*4+2][c];
+            PIXEL y0 = output[(r<<2)+2][c];
+            PIXEL y1 = output[((r+1)<<2)+2][c];
+            PIXEL y2 = output[((r+2)<<2)+2][c];
+            PIXEL y3 = output[((r+3)<<2)+2][c];
             
             int i = 0;
             if(r == 0) i -= 2;
@@ -193,16 +220,16 @@ void thirdLagrange(img128 input, img512 output){
 				int l2 = -n2 * 3;
 				int l3 = n3;
 
-				output[r*4+i+2][c] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+				output[(r<<2)+i+2][c] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3.0);
 			}
         }
 
         //바운더리
         int r = 124;
-        PIXEL y0 = output[r*4+2][c];
-        PIXEL y1 = output[(r+1)*4+2][c];
-        PIXEL y2 = output[(r+2)*4+2][c];
-        PIXEL y3 = output[(r+3)*4+2][c];
+        PIXEL y0 = output[(r<<2)+2][c];
+        PIXEL y1 = output[((r+1)<<2)+2][c];
+        PIXEL y2 = output[((r+2)<<2)+2][c];
+        PIXEL y3 = output[((r+3)<<2)+2][c];
         int i = 0;
         for (; i < 14; i++) {
             int n0 = (i - 4) * (i - 8) * (i - 12); 
@@ -215,7 +242,7 @@ void thirdLagrange(img128 input, img512 output){
             int l2 = -n2 * 3;
             int l3 = n3;
 
-            output[r*4+i+2][c] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+            output[(r<<2)+i+2][c] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3.0);
         }
     }
 }
@@ -226,7 +253,7 @@ void sixtab(img128 input, img512 output){
     //간격벌려서 저장
     for(int r = 0; r < 128; r++){
         for(int c = 0; c < 128; c++)
-            output[r*4+2][c*4+2] = input[r][c]; //510 * 510
+            output[(r<<2)+2][(c<<2)+2] = input[r][c]; //510 * 510
     }
 
     //줄 진행
@@ -261,7 +288,7 @@ void sixtab(img128 input, img512 output){
             int l2 = -n2 * 3;
             int l3 = n3;
 
-            output[r][2+i] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+            output[r][2+i] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3.0);
         }
     }
 
@@ -283,7 +310,7 @@ void sixtab(img128 input, img512 output){
             int l2 = -n2 * 3;
             int l3 = n3;
 
-            output[r][498+i] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3);
+            output[r][498+i] = (PIXEL)((((y0 * l0) + (y1 * l1) + (y2 * l2) + (y3 * l3) + 192) >> 7) / 3.0);
         }
     }
     
@@ -377,4 +404,26 @@ void sixtab(img128 input, img512 output){
 		output[1][c] = output[2][c]; // 위
 		output[511][c] = output[510][c]; // 아래
 	}
+}
+
+void RMSEandPSNR(img512 input, img512 output) {
+	int mn = 512 * 512;
+	int sum = 0;
+    int error = 0;
+	
+	for (int i = 0; i < 512; i++){
+		for (int j = 0; j < 512; j++){
+			error = input[i][j] - output[i][j];
+			sum += error * error;
+		}
+	}
+	double mse = (double)(sum / mn);
+	double rmse = sqrt(mse);
+	double psnr = 20 * log10(255 / rmse);
+
+    printf("Interpolation\n");
+    printf("RMSE: about %lf\n", rmse);
+    printf("PSNR: about %lf\n", psnr);
+    printf("\n\n");
+
 }
