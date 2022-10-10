@@ -1,29 +1,35 @@
 #include <stdio.h>
 #include <math.h>
 
+//사진 이미지들의 경로 및 저장할 이미지 경로
 #define P_LENA128 "./Lena_128x128_yuv400.raw"
 #define P_LENA512 "./Lena_512x512_yuv400_original.raw"
 #define P_LENA512_BILINEAR "./Lena_512x512_yuv400_bilinear.raw"
 #define P_LENA512_3THLAGRANGE "./Lena_512x512_yuv400_3thlagrange.raw"
 #define P_LENA512_SIXTAB "./Lena_512x512_yuv400_sixtab.raw"
 
+//이미지를 불러올 타입 선언
 typedef unsigned char PIXEL;
 typedef PIXEL img128[128][128];
 typedef PIXEL img512[512][512];
 
+//이미지 메모리로 불러오기 및 저장 함수
 void get128(img128 img, char * path);
 void get512(img512 img, char * path);
 void put128(img128 img);
 void put512(img512 img);
 void save512(img512 img, char * path);
 
+//interpolation 함수들
 void bilinear(img128 input, img512 output);
 void thirdLagrange(img128 input, img512 output);
 void sixtab(img128 input, img512 output);
 
+//평가 함수
 void RMSEandPSNR(img512 input, img512 output);
 
 int main(void){
+    //128 다운샘플링 및 512 원본이미지 불러오기
     img128 LENA;
     img512 LENA_ORIGINAL;
     get128(LENA, P_LENA128);
@@ -31,6 +37,7 @@ int main(void){
     //put512(LENA_ORIGINAL);
     //put128(LENA);
 
+    //Bilinear interpolation
     printf("BILINEAR\n");
     img512 LENA_BILINEAR;
     bilinear(LENA, LENA_BILINEAR);
@@ -38,13 +45,15 @@ int main(void){
     save512(LENA_BILINEAR, P_LENA512_BILINEAR);
     RMSEandPSNR(LENA_ORIGINAL, LENA_BILINEAR);
 
+    //3thlagrange interpolation
     printf("3THLAGRANGE\n");
     img512 LENA_3THLAGRANGE;
     thirdLagrange(LENA, LENA_3THLAGRANGE);
     //put512(LENA_3THLAGRANGE);
     save512(LENA_3THLAGRANGE, P_LENA512_3THLAGRANGE);
     RMSEandPSNR(LENA_ORIGINAL, LENA_3THLAGRANGE);
-    
+
+    //6sixtab interpolation    
     printf("6SIXTAB\n");
     img512 LENA_SIXTAB;
     sixtab(LENA, LENA_SIXTAB);
@@ -151,6 +160,7 @@ void bilinear(img128 input, img512 output){
 }
 
 void thirdLagrange(img128 input, img512 output){
+    //행 interpolation
     for(int r = 0; r < 128; r++){
         for(int c = 0; c < 124; c+=3){
             PIXEL y0 = input[r][c];
@@ -199,7 +209,7 @@ void thirdLagrange(img128 input, img512 output){
         }
     }
     
-    //put512(output);
+    //열 interpolation
     for(int c = 0; c < 512; c++){
         for(int r = 0; r < 124; r+=3){
             PIXEL y0 = output[(r<<2)+2][c];
